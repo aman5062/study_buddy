@@ -1,11 +1,14 @@
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
 const pdfParse = require('pdf-parse');
 const pool = require('../config/database');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { uploadPDF } = require('../middleware/upload');
 const { processDocument } = require('../services/aiService');
 const { chunkText, storeEmbeddings } = require('../services/ragService');
+
+const UPLOADS_DIR = path.resolve('uploads');
 
 const router = express.Router();
 
@@ -15,17 +18,20 @@ router.post('/upload', authenticate, requireRole('teacher'), uploadPDF.single('f
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
+    // Construct a safe path using only the basename to prevent path traversal
+    const safePath = path.join(UPLOADS_DIR, path.basename(file.path));
+
     // Insert with processing status
     const docResult = await pool.query(
       'INSERT INTO documents (teacher_id, title, filename, file_path, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.user.id, title, file.originalname, file.path, 'processing']
+      [req.user.id, title, file.originalname, safePath, 'processing']
     );
     const doc = docResult.rows[0];
 
     // Process async
     (async () => {
       try {
-        const dataBuffer = fs.readFileSync(file.path);
+        const dataBuffer = fs.readFileSync(safePath);
         const pdfData = await pdfParse(dataBuffer);
         const text = pdfData.text;
 
