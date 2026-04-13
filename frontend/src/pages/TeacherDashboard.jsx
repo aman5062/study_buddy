@@ -29,7 +29,9 @@ export default function TeacherDashboard() {
       const [s, d] = await Promise.all([getStudents(), getDocuments()]);
       setStudents(s.data);
       setDocuments(d.data);
-    } catch {}
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
+    }
     setLoading(false);
   };
 

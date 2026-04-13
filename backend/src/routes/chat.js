@@ -16,10 +16,10 @@ router.post('/', authenticate, async (req, res) => {
     const context = chunks.map(c => c.chunk_text).join('\n\n');
     
     const historyResult = await pool.query(
-      'SELECT role, message FROM chat_history WHERE user_id = $1 AND (document_id = $2 OR ($2::integer IS NULL AND document_id IS NULL)) ORDER BY created_at DESC LIMIT 10',
+      'SELECT role, message FROM chat_history WHERE user_id = $1 AND (document_id = $2 OR ($2::integer IS NULL AND document_id IS NULL)) ORDER BY created_at ASC LIMIT 10',
       [req.user.id, documentId || null]
     );
-    const history = historyResult.rows.reverse();
+    const history = historyResult.rows;
     
     const answer = await generateRAGAnswer(message, context, history);
     

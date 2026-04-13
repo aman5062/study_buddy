@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
@@ -12,11 +13,28 @@ app.use(cors({
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/teacher', require('./routes/teacher'));
-app.use('/api/student', require('./routes/student'));
-app.use('/api/documents', require('./routes/documents'));
-app.use('/api/chat', require('./routes/chat'));
+// Rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/auth', authLimiter, require('./routes/auth'));
+app.use('/api/teacher', apiLimiter, require('./routes/teacher'));
+app.use('/api/student', apiLimiter, require('./routes/student'));
+app.use('/api/documents', apiLimiter, require('./routes/documents'));
+app.use('/api/chat', apiLimiter, require('./routes/chat'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

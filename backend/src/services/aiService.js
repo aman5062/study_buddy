@@ -3,9 +3,12 @@ require('dotenv').config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+// Maximum characters to send to the AI model to stay within token limits
+const MAX_DOCUMENT_LENGTH = 30000;
+
 async function processDocument(text) {
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  const truncated = text.slice(0, 30000);
+  const truncated = text.slice(0, MAX_DOCUMENT_LENGTH);
   
   const prompt = `Analyze the following educational document and return a JSON object with exactly these fields:
 {
