@@ -259,14 +259,32 @@ ${context}
 ${historyText ? `Conversation history:\n${historyText}\n` : ''}
 Student question: ${query}
 
-Provide a helpful response that:
-1. Explains the concept clearly.
-2. Includes relevant formulas with LaTeX formatting when useful.
-3. Gives practical examples from engineering applications.
-4. Connects to real-world use cases.
-5. Notes any common mistakes to avoid.
+Return your answer in this exact structure and keep it concise:
 
-If the context does not have enough information, supplement carefully with general knowledge and say so plainly.`;
+## Key Points
+- 3 to 5 bullet points with the most important ideas.
+
+## Explanation
+- 1 short paragraph or 3 to 4 bullets explaining the concept simply.
+
+## Example
+- 1 practical example from engineering or daily life.
+
+## Formula or Rule
+- Include a formula, rule, or simple relation if relevant. If not relevant, write "Not needed for this topic."
+
+## Common Mistakes
+- 2 to 3 bullets with mistakes students usually make.
+
+## One-Line Summary
+- 1 sentence that captures the whole answer.
+
+Rules:
+- Do not write a long essay.
+- Do not use markdown tables.
+- Use plain bullet lists and short headings only.
+- If the question is specifically "summarize" or "summarize the key points", make the response even shorter and prioritize the Key Points section.
+- If the context does not have enough information, say so in one sentence and then continue with general knowledge.`;
 }
 
 async function withRetries(taskName, executor) {

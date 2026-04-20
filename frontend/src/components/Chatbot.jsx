@@ -91,7 +91,7 @@ export default function Chatbot({ documentId }) {
                   }`}
                   style={m.role === 'user' ? { background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' } : {}}
                 >
-                  {m.content}
+                  {m.role === 'assistant' ? <StructuredMessage content={m.content} /> : m.content}
                 </div>
               </div>
             ))}
@@ -160,6 +160,55 @@ export default function Chatbot({ documentId }) {
       >
         {open ? '✕' : '💬'}
       </button>
+    </div>
+  );
+}
+
+function StructuredMessage({ content }) {
+  const lines = String(content || '').split('\n');
+
+  return (
+    <div className="space-y-2 whitespace-normal">
+      {lines.map((line, index) => {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          return <div key={index} className="h-1" />;
+        }
+
+        if (trimmed.startsWith('## ')) {
+          return (
+            <div key={index} className="mt-2 text-xs font-black uppercase tracking-[0.2em] text-brand-700">
+              {trimmed.slice(3)}
+            </div>
+          );
+        }
+
+        if (trimmed.startsWith('- ')) {
+          return (
+            <div key={index} className="flex gap-2 text-sm leading-6 text-ink-700">
+              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-brand-500" />
+              <span>{trimmed.slice(2)}</span>
+            </div>
+          );
+        }
+
+        if (/^\d+\.\s/.test(trimmed)) {
+          const [number, ...rest] = trimmed.split('.');
+          return (
+            <div key={index} className="flex gap-2 text-sm leading-6 text-ink-700">
+              <span className="font-semibold text-brand-700">{number}.</span>
+              <span>{rest.join('.').trim()}</span>
+            </div>
+          );
+        }
+
+        return (
+          <p key={index} className="text-sm leading-6 text-ink-700">
+            {trimmed}
+          </p>
+        );
+      })}
     </div>
   );
 }
