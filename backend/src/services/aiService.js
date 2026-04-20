@@ -1,9 +1,12 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const apiKey = process.env.GEMINI_API_KEY || '';
+const genAI = new GoogleGenerativeAI(apiKey);
 
-const MAX_DOCUMENT_LENGTH = 50000;
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
+const EMBEDDING_MODEL = process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001';
+const MAX_DOCUMENT_LENGTH = Number.parseInt(process.env.AI_MAX_DOCUMENT_CHARS || '50000', 10);
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
@@ -11,145 +14,207 @@ const EMPTY_RESULT = {
   summary: '',
   qa: [],
   flashcards: [],
-  mindmap: { topic: 'Document', subtopics: [] },
+  mindmap: { topic: 'Document', description: '', subtopics: [] },
   predictions: [],
+  formulas: [],
+  realWorldExamples: [],
+  commonMistakes: [],
 };
 
-function extractJSON(text) {
-  // Remove markdown code fences
-  let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+function stripCodeFences(text) {
+  return text
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/gi, '')
+    .trim();
+}
 
-  // Try direct parse first
+function extractJson(text) {
+  const cleaned = stripCodeFences(text);
+
   try {
     return JSON.parse(cleaned);
-  } catch (_) { /* fall through */ }
+  } catch (_) {
+    // Fall through and try to recover the first JSON object in the response.
+  }
 
-  // Try to find a JSON object in the text via brace matching
   const firstBrace = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
+
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    try {
-      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
-    } catch (_) { /* fall through */ }
+    return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
   }
 
   throw new Error('Could not extract valid JSON from AI response');
 }
 
-function validateAndFill(data) {
+function asNonEmptyString(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function normalizeMindmapNode(node) {
+  if (!node || typeof node !== 'object') {
+    return null;
+  }
+
+  const topic = asNonEmptyString(node.topic);
+  if (!topic) {
+    return null;
+  }
+
+  const subtopics = Array.isArray(node.subtopics)
+    ? node.subtopics.map(normalizeMindmapNode).filter(Boolean)
+    : [];
+
+  const normalized = { topic, subtopics };
+  const description = asNonEmptyString(node.description);
+  if (description) {
+    normalized.description = description;
+  }
+
+  return normalized;
+}
+
+function normalizeResult(data) {
   const result = { ...EMPTY_RESULT };
 
-  if (typeof data.summary === 'string' && data.summary.trim()) {
-    result.summary = data.summary.trim();
+  const summary = asNonEmptyString(data.summary);
+  if (summary) {
+    result.summary = summary;
   }
 
   if (Array.isArray(data.qa)) {
-    result.qa = data.qa.filter(
-      (item) => item && typeof item.question === 'string' && typeof item.answer === 'string'
-    );
+    result.qa = data.qa
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        question: asNonEmptyString(item.question),
+        answer: asNonEmptyString(item.answer),
+      }))
+      .filter((item) => item.question && item.answer);
   }
 
   if (Array.isArray(data.flashcards)) {
-    result.flashcards = data.flashcards.filter(
-      (item) => item && typeof item.term === 'string' && typeof item.definition === 'string'
-    );
+    result.flashcards = data.flashcards
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        term: asNonEmptyString(item.term),
+        definition: asNonEmptyString(item.definition),
+        category: asNonEmptyString(item.category) || 'Theory',
+      }))
+      .filter((item) => item.term && item.definition);
   }
 
-  if (data.mindmap && typeof data.mindmap.topic === 'string') {
-    result.mindmap = data.mindmap;
+  const mindmap = normalizeMindmapNode(data.mindmap);
+  if (mindmap) {
+    result.mindmap = mindmap;
   }
 
   if (Array.isArray(data.predictions)) {
-    result.predictions = data.predictions.filter(
-      (item) => item && typeof item.topic === 'string' && typeof item.reason === 'string'
-    ).map((item) => ({
-      topic: item.topic,
-      reason: item.reason,
-      priority: ['high', 'medium', 'low'].includes(item.priority) ? item.priority : 'medium',
-    }));
+    result.predictions = data.predictions
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        topic: asNonEmptyString(item.topic),
+        reason: asNonEmptyString(item.reason),
+        priority: ['high', 'medium', 'low'].includes(item.priority) ? item.priority : 'medium',
+        chapter: asNonEmptyString(item.chapter),
+      }))
+      .filter((item) => item.topic && item.reason);
+  }
+
+  if (Array.isArray(data.formulas)) {
+    result.formulas = data.formulas
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        name: asNonEmptyString(item.name),
+        formula: asNonEmptyString(item.formula),
+        description: asNonEmptyString(item.description),
+        derivation: asNonEmptyString(item.derivation),
+      }))
+      .filter((item) => item.name && item.formula);
+  }
+
+  if (Array.isArray(data.realWorldExamples)) {
+    result.realWorldExamples = data.realWorldExamples
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        title: asNonEmptyString(item.title),
+        description: asNonEmptyString(item.description),
+        relevantConcepts: Array.isArray(item.relevantConcepts)
+          ? item.relevantConcepts.map(asNonEmptyString).filter(Boolean)
+          : [],
+      }))
+      .filter((item) => item.title && item.description);
+  }
+
+  if (Array.isArray(data.commonMistakes)) {
+    result.commonMistakes = data.commonMistakes
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        mistake: asNonEmptyString(item.mistake),
+        correct: asNonEmptyString(item.correct),
+        explanation: asNonEmptyString(item.explanation),
+      }))
+      .filter((item) => item.mistake && item.correct);
   }
 
   return result;
 }
 
-async function processDocument(text) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  const truncated = text.slice(0, MAX_DOCUMENT_LENGTH);
-
-  const prompt = `You are an expert educational content analyzer. Analyze the document below and return ONLY a valid JSON object (no markdown, no code fences, no extra text) with ALL of these fields fully populated:
+function buildDocumentPrompt(text) {
+  return `You are an expert educational content analyzer. Analyze the document below and return ONLY a valid JSON object with this exact structure:
 
 {
-  "summary": "A detailed 4-6 paragraph summary covering all major topics, key concepts, and important details from the document. Be comprehensive.",
+  "summary": "A detailed 5-7 paragraph summary covering the full document, major ideas, and important supporting details.",
   "qa": [
-    {"question": "Specific question about the content?", "answer": "Detailed answer based on the document."},
-    ... at least 12 question-answer pairs covering the breadth of the document
+    { "question": "Specific question about the document?", "answer": "Detailed answer grounded in the document." }
   ],
   "flashcards": [
-    {"term": "Key Term or Concept", "definition": "Clear, concise definition or explanation."},
-    ... at least 12 flashcards for key vocabulary, concepts, and facts
+    { "term": "Key term or concept", "definition": "Clear definition or explanation.", "category": "Theory|Formula|Practical|Example" }
   ],
   "mindmap": {
-    "topic": "Central Topic of the Document",
+    "topic": "Central topic of the document",
+    "description": "Short overview of the whole document",
     "subtopics": [
       {
-        "topic": "Main Section 1",
+        "topic": "Main section",
+        "description": "Key idea from this branch",
         "subtopics": [
-          {"topic": "Key Detail A", "subtopics": []},
-          {"topic": "Key Detail B", "subtopics": []}
-        ]
-      },
-      {
-        "topic": "Main Section 2",
-        "subtopics": [
-          {"topic": "Key Detail C", "subtopics": []}
+          { "topic": "Nested concept", "description": "Short detail", "subtopics": [] }
         ]
       }
     ]
   },
   "predictions": [
-    {"topic": "Likely Exam Topic", "reason": "Why this topic is likely to be tested.", "priority": "high"},
-    ... at least 6 exam predictions with priority values of "high", "medium", or "low"
+    { "topic": "Likely exam topic", "reason": "Why it matters for exams", "priority": "high|medium|low", "chapter": "Optional chapter reference" }
+  ],
+  "formulas": [
+    { "name": "Formula name", "formula": "Mathematical expression or symbolic form", "description": "When and why it is used", "derivation": "Brief derivation or intuition" }
+  ],
+  "realWorldExamples": [
+    { "title": "Application name", "description": "How the concept is used in practice", "relevantConcepts": ["concept 1", "concept 2"] }
+  ],
+  "commonMistakes": [
+    { "mistake": "Common student error", "correct": "Correct approach", "explanation": "Why the mistake happens and how to avoid it" }
   ]
 }
 
-IMPORTANT: Every array must have real content from the document. Do not leave any field empty or use placeholder text. Return ONLY the JSON object.
+Rules:
+- Use only valid JSON.
+- Do not wrap the response in markdown or code fences.
+- Fill every array with substantial content.
+- Prefer breadth and depth: aim for at least 12 Q&A items, 16 flashcards, 10 formulas, 8 real-world examples, 6 common mistakes, and 8 exam predictions when the source material supports it.
+- Stay faithful to the document, but you may add general educational context that helps a student learn the topic better.
 
-Document:
-${truncated}`;
-
-  const MAX_RETRIES_LOCAL = MAX_RETRIES;
-  let lastError;
-
-  for (let attempt = 1; attempt <= MAX_RETRIES_LOCAL; attempt++) {
-    try {
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
-      const parsed = extractJSON(responseText);
-      return validateAndFill(parsed);
-    } catch (err) {
-      console.error(`processDocument attempt ${attempt} failed:`, err.message);
-      lastError = err;
-      if (attempt < MAX_RETRIES_LOCAL) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
-      }
-    }
-  }
-
-  throw lastError;
+Document Content:
+${text.slice(0, MAX_DOCUMENT_LENGTH)}`;
 }
 
-async function generateEmbedding(text) {
-  const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
-  const result = await model.embedContent(text);
-  return result.embedding.values;
-}
+function buildChatPrompt(query, context, history) {
+  const historyText = history
+    .slice(-6)
+    .map((item) => `${item.role}: ${item.message}`)
+    .join('\n');
 
-async function generateRAGAnswer(query, context, history) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  
-  const historyText = history.slice(-6).map(h => `${h.role}: ${h.message}`).join('\n');
-  
-  const prompt = `You are a helpful study assistant. Use the provided context to answer the student's question accurately.
+  return `You are an expert engineering professor and study buddy. Help students understand concepts clearly.
 
 Context from documents:
 ${context}
@@ -157,8 +222,67 @@ ${context}
 ${historyText ? `Conversation history:\n${historyText}\n` : ''}
 Student question: ${query}
 
-Provide a clear, educational answer based on the context. If the context doesn't contain enough information, say so.`;
+Provide a helpful response that:
+1. Explains the concept clearly.
+2. Includes relevant formulas with LaTeX formatting when useful.
+3. Gives practical examples from engineering applications.
+4. Connects to real-world use cases.
+5. Notes any common mistakes to avoid.
 
+If the context does not have enough information, supplement carefully with general knowledge and say so plainly.`;
+}
+
+async function withRetries(taskName, executor) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      return await executor();
+    } catch (err) {
+      lastError = err;
+      console.error(`${taskName} attempt ${attempt} failed:`, err.message);
+      if (attempt < MAX_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+async function processDocument(text) {
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
+  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const prompt = buildDocumentPrompt(text);
+
+  return withRetries('processDocument', async () => {
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    const parsed = extractJson(responseText);
+    return normalizeResult(parsed);
+  });
+}
+
+async function generateEmbedding(text) {
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
+  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
+  const result = await model.embedContent(text);
+  return result.embedding.values.slice(0, 768);
+}
+
+async function generateRAGAnswer(query, context, history) {
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
+  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const prompt = buildChatPrompt(query, context, history);
   const result = await model.generateContent(prompt);
   return result.response.text();
 }

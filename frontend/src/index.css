@@ -97,3 +97,58 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.prose h2 {
+  @apply text-xl font-semibold text-slate-800 mb-3 mt-6;
+}
+
+.prose h3 {
+  @apply text-lg font-medium text-slate-700 mb-2 mt-4;
+}
+
+.prose p {
+  @apply text-slate-600 leading-relaxed mb-3;
+}
+
+.prose ul, .prose ol {
+  @apply my-3 pl-6;
+}
+
+.prose li {
+  @apply text-slate-600 mb-1;
+}
+
+.prose strong {
+  @apply text-slate-800 font-semibold;
+}
+
+.prose code {
+  @apply bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

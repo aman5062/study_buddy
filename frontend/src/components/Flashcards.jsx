@@ -1,142 +1,168 @@
 import { useState } from 'react';
 
-export default function Flashcards({ flashcards }) {
-  const [index, setIndex]   = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const [view, setView]     = useState('card'); // 'card' | 'list'
+const CATEGORY_STYLES = {
+  Theory: { gradient: 'from-slate-800 via-slate-700 to-slate-900', badge: 'bg-slate-100 text-slate-700' },
+  Formula: { gradient: 'from-emerald-600 via-teal-600 to-cyan-600', badge: 'bg-emerald-100 text-emerald-700' },
+  Practical: { gradient: 'from-orange-600 via-amber-600 to-red-600', badge: 'bg-orange-100 text-orange-700' },
+  Example: { gradient: 'from-indigo-600 via-violet-600 to-purple-600', badge: 'bg-indigo-100 text-indigo-700' },
+  default: { gradient: 'from-slate-700 via-slate-600 to-slate-800', badge: 'bg-slate-100 text-slate-700' },
+};
 
-  if (!flashcards || flashcards.length === 0) {
+function toCards(flashcards) {
+  return Array.isArray(flashcards) ? flashcards : [];
+}
+
+export default function Flashcards({ flashcards }) {
+  const cards = toCards(flashcards);
+  const [index, setIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [view, setView] = useState('card');
+
+  if (cards.length === 0) {
     return (
-      <div className="text-center py-16">
-        <div className="w-14 h-14 bg-ink-100 rounded-full flex items-center justify-center text-2xl mx-auto mb-3">🃏</div>
-        <p className="text-ink-400 text-sm">No flashcards available.</p>
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center text-sm text-slate-500">
+        No flashcards available.
       </div>
     );
   }
 
-  const card = flashcards[index];
-  const prev = () => { setIndex(i => (i - 1 + flashcards.length) % flashcards.length); setFlipped(false); };
-  const next = () => { setIndex(i => (i + 1) % flashcards.length); setFlipped(false); };
-  const progress = ((index + 1) / flashcards.length) * 100;
+  const card = cards[index];
+  const style = CATEGORY_STYLES[card.category] || CATEGORY_STYLES.default;
+
+  const goTo = (nextIndex) => {
+    setIndex(nextIndex);
+    setFlipped(false);
+  };
+
+  const next = () => goTo((index + 1) % cards.length);
+  const previous = () => goTo((index - 1 + cards.length) % cards.length);
 
   return (
-    <div>
-      {/* View toggle */}
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-ink-500">
-          Card <span className="font-bold text-ink-800">{index + 1}</span> of{' '}
-          <span className="font-bold text-ink-800">{flashcards.length}</span>
-        </p>
-        <div className="flex items-center gap-1 bg-ink-100 rounded-xl p-1">
-          {[{ id: 'card', icon: '🃏', label: 'Cards' }, { id: 'list', icon: '📋', label: 'List' }].map(v => (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm font-medium text-slate-500">
+          Card <span className="font-semibold text-slate-900">{index + 1}</span> of{' '}
+          <span className="font-semibold text-slate-900">{cards.length}</span>
+        </div>
+
+        <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+          {['card', 'list'].map((mode) => (
             <button
-              key={v.id}
-              onClick={() => setView(v.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                view === v.id ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+              key={mode}
+              onClick={() => setView(mode)}
+              className={`rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
+                view === mode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              {v.icon} {v.label}
+              {mode === 'card' ? 'Card View' : 'List View'}
             </button>
           ))}
         </div>
       </div>
 
       {view === 'card' ? (
-        <div className="flex flex-col items-center gap-5">
-          {/* Progress bar */}
-          <div className="w-full max-w-lg bg-ink-100 rounded-full h-1.5">
-            <div
-              className="h-1.5 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #7c3aed, #4f46e5)' }}
-            />
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-full max-w-3xl">
+            <div className="mb-3 h-1 rounded-full bg-slate-100">
+              <div
+                className="h-1 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 transition-all duration-300"
+                style={{ width: `${((index + 1) / cards.length) * 100}%` }}
+              />
+            </div>
           </div>
 
-          {/* Card */}
-          <div
-            className="flashcard w-full max-w-lg h-60 cursor-pointer select-none"
-            onClick={() => setFlipped(!flipped)}
-          >
-            <div className={`flashcard-inner w-full h-full ${flipped ? 'flipped' : ''}`}>
-              {/* Front */}
-              <div className="flashcard-front w-full h-full rounded-2xl flex flex-col items-center justify-center p-8 shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 50%, #4f46e5 100%)' }}>
-                <div className="text-white/60 text-xs font-bold uppercase tracking-widest mb-4">Term</div>
-                <p className="text-white text-xl font-bold text-center leading-snug">{card.term}</p>
-                <div className="mt-6 text-white/50 text-xs">Tap to reveal definition</div>
+          <div className="flashcard w-full max-w-3xl cursor-pointer" onClick={() => setFlipped((value) => !value)}>
+            <div className={`flashcard-inner h-[20rem] w-full ${flipped ? 'flipped' : ''}`}>
+              <div
+                className={`flashcard-front absolute inset-0 rounded-3xl bg-gradient-to-br ${style.gradient} p-8 shadow-2xl`}
+              >
+                <div className="flex h-full flex-col items-center justify-center text-center">
+                  <div className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-white/60">
+                    Term
+                  </div>
+                  <h3 className="text-2xl font-bold leading-relaxed text-white">{card.term}</h3>
+                  {card.category && (
+                    <span className={`mt-6 rounded-full px-3 py-1 text-xs font-semibold ${style.badge}`}>
+                      {card.category}
+                    </span>
+                  )}
+                  <div className="mt-6 text-xs text-white/50">Click to reveal the definition</div>
+                </div>
               </div>
-              {/* Back */}
-              <div className="flashcard-back w-full h-full rounded-2xl flex flex-col items-center justify-center p-8 shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #0369a1 0%, #0891b2 50%, #0284c7 100%)' }}>
-                <div className="text-white/60 text-xs font-bold uppercase tracking-widest mb-4">Definition</div>
-                <p className="text-white text-base text-center leading-relaxed">{card.definition}</p>
-                <div className="mt-6 text-white/50 text-xs">Tap to flip back</div>
+
+              <div className="flashcard-back absolute inset-0 rounded-3xl border border-slate-200 bg-white p-8 shadow-2xl">
+                <div className="flex h-full flex-col items-center justify-center text-center">
+                  <div className="mb-4 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
+                    Definition
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800">{card.term}</h3>
+                  <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">{card.definition}</p>
+                  {card.category && (
+                    <span className={`mt-6 rounded-full px-3 py-1 text-xs font-semibold ${style.badge}`}>
+                      {card.category}
+                    </span>
+                  )}
+                  <div className="mt-6 text-xs text-slate-400">Click again to go back to the term</div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Navigation */}
           <div className="flex items-center gap-3">
             <button
-              onClick={prev}
-              className="px-5 py-2 bg-white text-ink-700 rounded-xl font-semibold text-sm card-shadow hover:bg-ink-50 transition-colors"
+              onClick={previous}
+              className="rounded-xl bg-slate-100 px-5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-200"
             >
-              ← Prev
+              Previous
             </button>
             <button
-              onClick={() => setFlipped(!flipped)}
-              className="px-5 py-2 text-sm font-semibold rounded-xl text-brand-700 bg-brand-50 hover:bg-brand-100 transition-colors"
+              onClick={() => setFlipped((value) => !value)}
+              className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
             >
               Flip
             </button>
             <button
               onClick={next}
-              className="px-5 py-2 bg-white text-ink-700 rounded-xl font-semibold text-sm card-shadow hover:bg-ink-50 transition-colors"
+              className="rounded-xl bg-slate-100 px-5 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-200"
             >
-              Next →
+              Next
             </button>
           </div>
 
-          {/* Dot navigation */}
-          <div className="flex gap-1.5 flex-wrap justify-center max-w-sm">
-            {flashcards.map((_, i) => (
+          <div className="flex max-w-2xl flex-wrap justify-center gap-2">
+            {cards.map((_, cardIndex) => (
               <button
-                key={i}
-                onClick={() => { setIndex(i); setFlipped(false); }}
-                className={`w-2 h-2 rounded-full transition-all ${
-                  i === index ? 'bg-brand-600 w-5' : 'bg-ink-300 hover:bg-ink-400'
+                key={cardIndex}
+                onClick={() => goTo(cardIndex)}
+                className={`h-2.5 rounded-full transition-all ${
+                  cardIndex === index ? 'w-6 bg-indigo-600' : 'w-2.5 bg-slate-300 hover:bg-slate-400'
                 }`}
+                aria-label={`Go to flashcard ${cardIndex + 1}`}
               />
             ))}
           </div>
         </div>
       ) : (
-        /* List view */
-        <div className="space-y-3">
-          {flashcards.map((fc, i) => (
-            <div key={i} className="bg-white rounded-2xl card-shadow overflow-hidden">
-              <div className="flex">
-                <div className="w-1.5 flex-shrink-0" style={{ background: 'linear-gradient(180deg, #7c3aed, #4f46e5)' }} />
-                <div className="flex-1 p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 bg-brand-100 text-brand-700 rounded-full text-xs font-black flex items-center justify-center">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs font-bold text-brand-600 uppercase tracking-wider mb-1">Term</p>
-                        <p className="font-semibold text-ink-800 text-sm">{fc.term}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-teal-600 uppercase tracking-wider mb-1">Definition</p>
-                        <p className="text-ink-600 text-sm leading-relaxed">{fc.definition}</p>
-                      </div>
-                    </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {cards.map((flashcard, cardIndex) => {
+            const itemStyle = CATEGORY_STYLES[flashcard.category] || CATEGORY_STYLES.default;
+            return (
+              <article key={cardIndex} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    Flashcard {cardIndex + 1}
                   </div>
+                  {flashcard.category && (
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${itemStyle.badge}`}>
+                      {flashcard.category}
+                    </span>
+                  )}
                 </div>
-              </div>
-            </div>
-          ))}
+                <h3 className="mt-4 text-lg font-bold text-slate-900">{flashcard.term}</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-600">{flashcard.definition}</p>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

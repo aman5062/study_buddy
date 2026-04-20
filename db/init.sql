@@ -17,10 +17,13 @@ CREATE TABLE documents (
   file_path VARCHAR(1000) NOT NULL,
   status VARCHAR(50) DEFAULT 'processing' CHECK (status IN ('processing', 'ready', 'failed')),
   summary TEXT,
-  qa JSONB,
-  flashcards JSONB,
+  qa JSONB DEFAULT '[]'::jsonb,
+  flashcards JSONB DEFAULT '[]'::jsonb,
   mindmap JSONB,
-  predictions JSONB,
+  predictions JSONB DEFAULT '[]'::jsonb,
+  formulas JSONB DEFAULT '[]'::jsonb,
+  real_world_examples JSONB DEFAULT '[]'::jsonb,
+  common_mistakes JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

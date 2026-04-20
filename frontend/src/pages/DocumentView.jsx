@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Flashcards from '../components/Flashcards';
 import MindMap from '../components/MindMap';
@@ -7,240 +7,391 @@ import Chatbot from '../components/Chatbot';
 import { getDocument } from '../services/api';
 
 const TABS = [
-  { id: 'summary',     label: 'Summary',      icon: '📋' },
-  { id: 'qa',          label: 'Q & A',        icon: '❓' },
-  { id: 'flashcards',  label: 'Flashcards',   icon: '🃏' },
-  { id: 'mindmap',     label: 'Mind Map',     icon: '🗺️' },
-  { id: 'predictions', label: 'Exam Prep',    icon: '🎯' },
+  { id: 'summary', label: 'Summary' },
+  { id: 'qa', label: 'Q&A' },
+  { id: 'flashcards', label: 'Flashcards' },
+  { id: 'mindmap', label: 'Mind Map' },
+  { id: 'formulas', label: 'Formulas' },
+  { id: 'examples', label: 'Examples' },
+  { id: 'mistakes', label: 'Mistakes' },
+  { id: 'predictions', label: 'Exam Prep' },
 ];
+
+const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+
+function toArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function formatDate(value) {
+  if (!value) return 'Unknown date';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Unknown date'
+    : date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+}
 
 export default function DocumentView() {
   const { id } = useParams();
-  const [doc, setDoc]       = useState(null);
-  const [tab, setTab]       = useState('summary');
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [doc, setDoc] = useState(null);
+  const [tab, setTab] = useState('summary');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+
     getDocument(id)
-      .then(r => { setDoc(r.data); setLoading(false); })
-      .catch(() => { setLoading(false); navigate(-1); });
-  }, [id]);
+      .then((response) => {
+        if (!active) return;
+        setDoc(response.data);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setLoading(false);
+        navigate(-1);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id, navigate]);
+
+  const counts = useMemo(() => ({
+    qa: toArray(doc?.qa).length,
+    flashcards: toArray(doc?.flashcards).length,
+    formulas: toArray(doc?.formulas).length,
+    examples: toArray(doc?.real_world_examples).length,
+    mistakes: toArray(doc?.common_mistakes).length,
+    predictions: toArray(doc?.predictions).length,
+  }), [doc]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-ink-50">
+      <div className="min-h-screen bg-slate-50">
         <Navbar />
         <div className="max-w-5xl mx-auto px-6 py-16 text-center">
-          <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-ink-400 font-medium">Loading document…</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-slate-700" />
+          <p className="text-sm font-medium text-slate-500">Loading document...</p>
         </div>
       </div>
     );
   }
+
   if (!doc) return null;
 
+  const dataTabs = {
+    summary: <SummarySection summary={doc.summary} />,
+    qa: <QASection qa={toArray(doc.qa)} />,
+    flashcards: <Flashcards flashcards={toArray(doc.flashcards)} />,
+    mindmap: <MindMap mindmap={doc.mindmap} />,
+    formulas: <FormulaSection formulas={toArray(doc.formulas)} />,
+    examples: <ExampleSection examples={toArray(doc.real_world_examples)} />,
+    mistakes: <MistakesSection mistakes={toArray(doc.common_mistakes)} />,
+    predictions: <PredictionSection predictions={toArray(doc.predictions)} />,
+  };
+
   return (
-    <div className="min-h-screen bg-ink-50">
+    <div className="min-h-screen bg-slate-50">
       <Navbar />
 
-      {/* ── Document header ── */}
-      <div className="border-b border-ink-200 bg-white">
-        <div className="max-w-5xl mx-auto px-6 py-6">
+      <div className="border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto max-w-6xl px-6 py-6">
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-brand-700 transition-colors mb-4 group"
+            className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-800"
           >
-            <span className="group-hover:-translate-x-0.5 transition-transform">←</span>
+            <span aria-hidden="true">←</span>
             Back to dashboard
           </button>
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>
-              📄
+
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                {doc.status || 'ready'}
+              </div>
+              <h1 className="text-3xl font-black tracking-tight text-slate-900">{doc.title}</h1>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                <span>{formatDate(doc.created_at)}</span>
+                <span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline-block" />
+                <span>{doc.filename}</span>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-black text-ink-900 leading-tight">{doc.title}</h1>
-              <p className="text-ink-400 text-sm mt-1">
-                AI-processed •{' '}
-                {new Date(doc.created_at).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </p>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <MetricCard label="Q&A" value={counts.qa} />
+              <MetricCard label="Flashcards" value={counts.flashcards} />
+              <MetricCard label="Formulas" value={counts.formulas} />
+              <MetricCard label="Examples" value={counts.examples} />
+              <MetricCard label="Mistakes" value={counts.mistakes} />
+              <MetricCard label="Predictions" value={counts.predictions} />
             </div>
           </div>
-        </div>
 
-        {/* ── Tabs ── */}
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="flex gap-0 overflow-x-auto">
-            {TABS.map(t => (
+          <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+            {TABS.map((item) => (
               <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-all ${
-                  tab === t.id
-                    ? 'border-brand-600 text-brand-700'
-                    : 'border-transparent text-ink-500 hover:text-ink-800 hover:border-ink-300'
+                key={item.id}
+                onClick={() => setTab(item.id)}
+                className={`flex-shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-all ${
+                  tab === item.id
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                 }`}
               >
-                <span>{t.icon}</span>
-                {t.label}
+                {item.label}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── Tab content ── */}
-      <div className="max-w-5xl mx-auto px-6 py-8 animate-fade-in">
-        {tab === 'summary' && <SummaryTab doc={doc} />}
-        {tab === 'qa'      && <QATab doc={doc} />}
-        {tab === 'flashcards' && (
-          <div>
-            <SectionHeader icon="🃏" title="Flashcards" count={doc.flashcards?.length} unit="card" />
-            <Flashcards flashcards={doc.flashcards} />
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        {doc.status === 'processing' && (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            This document is still processing. The content will update automatically once the AI summary is ready.
           </div>
         )}
-        {tab === 'mindmap' && (
-          <div>
-            <SectionHeader icon="🗺️" title="Mind Map" />
-            <div className="bg-white rounded-2xl card-shadow p-6 overflow-auto">
-              <MindMap mindmap={doc.mindmap} />
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          {dataTabs[tab]}
+        </div>
+      </div>
+
+      <Chatbot documentId={Number.parseInt(id, 10)} />
+    </div>
+  );
+}
+
+function MetricCard({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-1 text-xl font-black text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function SummarySection({ summary }) {
+  const paragraphs = typeof summary === 'string'
+    ? summary.split(/\n+/).map((part) => part.trim()).filter(Boolean)
+    : [];
+
+  return (
+    <div>
+      <SectionHeader title="Document Summary" subtitle="A detailed overview of the uploaded material." />
+      {paragraphs.length > 0 ? (
+        <div className="space-y-4">
+          {paragraphs.map((paragraph, index) => (
+            <p key={index} className="text-[15px] leading-8 text-slate-700">
+              {paragraph}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="Summary not available" description="The AI processing step has not produced a summary yet." />
+      )}
+    </div>
+  );
+}
+
+function QASection({ qa }) {
+  const [openIndex, setOpenIndex] = useState(null);
+
+  return (
+    <div>
+      <SectionHeader title="Questions and Answers" subtitle="Use these for quick review and self-testing." count={qa.length} unit="item" />
+      {qa.length > 0 ? (
+        <div className="space-y-3">
+          {qa.map((item, index) => (
+            <div key={index} className="overflow-hidden rounded-2xl border border-slate-200">
+              <button
+                onClick={() => setOpenIndex(openIndex === index ? null : index)}
+                className="flex w-full items-center justify-between gap-4 bg-slate-50 px-4 py-4 text-left transition-colors hover:bg-slate-100"
+              >
+                <span className="text-sm font-semibold text-slate-800">{item.question}</span>
+                <span className={`text-slate-400 transition-transform ${openIndex === index ? 'rotate-180' : ''}`}>⌄</span>
+              </button>
+              {openIndex === index && (
+                <div className="border-t border-slate-100 bg-white px-4 py-4 text-sm leading-7 text-slate-600">
+                  {item.answer}
+                </div>
+              )}
             </div>
-          </div>
-        )}
-        {tab === 'predictions' && <PredictionsTab doc={doc} />}
-      </div>
-
-      <Chatbot documentId={parseInt(id)} />
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No Q&A available" description="The document did not generate any question-answer pairs." />
+      )}
     </div>
   );
 }
 
-/* ── Section header helper ── */
-function SectionHeader({ icon, title, count, unit }) {
+function FormulaSection({ formulas }) {
   return (
-    <div className="flex items-center gap-2 mb-5">
-      <span className="text-xl">{icon}</span>
-      <h2 className="text-xl font-black text-ink-900">{title}</h2>
+    <div>
+      <SectionHeader title="Key Formulas" subtitle="Core equations and how to use them." count={formulas.length} unit="formula" />
+      {formulas.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {formulas.map((formula, index) => (
+            <article
+              key={index}
+              className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-5 text-white shadow-sm"
+            >
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{formula.name}</div>
+              <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-base text-emerald-300">
+                {formula.formula}
+              </div>
+              <p className="mt-3 text-sm leading-7 text-slate-300">{formula.description}</p>
+              {formula.derivation && (
+                <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-6 text-slate-400">
+                  <span className="font-semibold text-slate-300">Derivation:</span> {formula.derivation}
+                </p>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No formulas available" description="The document did not produce a formula set." />
+      )}
+    </div>
+  );
+}
+
+function ExampleSection({ examples }) {
+  return (
+    <div>
+      <SectionHeader title="Real-World Examples" subtitle="Where this topic shows up in practice." count={examples.length} unit="example" />
+      {examples.length > 0 ? (
+        <div className="space-y-3">
+          {examples.map((example, index) => (
+            <article key={index} className="rounded-2xl border border-slate-200 p-5 transition-colors hover:border-indigo-200 hover:bg-indigo-50/30">
+              <h3 className="text-base font-semibold text-slate-900">{example.title}</h3>
+              <p className="mt-2 text-sm leading-7 text-slate-600">{example.description}</p>
+              {example.relevantConcepts?.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {example.relevantConcepts.map((concept, conceptIndex) => (
+                    <span
+                      key={conceptIndex}
+                      className="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-medium text-indigo-700"
+                    >
+                      {concept}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No examples available" description="Try uploading a more detailed source document." />
+      )}
+    </div>
+  );
+}
+
+function MistakesSection({ mistakes }) {
+  return (
+    <div>
+      <SectionHeader title="Common Mistakes" subtitle="Errors to watch for while studying." count={mistakes.length} unit="mistake" />
+      {mistakes.length > 0 ? (
+        <div className="space-y-3">
+          {mistakes.map((item, index) => (
+            <article key={index} className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5">
+              <div className="text-sm font-semibold text-rose-700">Mistake: {item.mistake}</div>
+              <div className="mt-3 rounded-xl bg-white px-4 py-3 text-sm leading-7 text-emerald-700">
+                Correct approach: {item.correct}
+              </div>
+              {item.explanation && (
+                <p className="mt-3 text-xs leading-6 text-slate-500">{item.explanation}</p>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No mistakes listed" description="The AI did not generate a mistakes section for this document." />
+      )}
+    </div>
+  );
+}
+
+function PredictionSection({ predictions }) {
+  const sorted = [...predictions].sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1));
+
+  return (
+    <div>
+      <SectionHeader title="Exam Prep" subtitle="What is most likely to show up on tests." count={sorted.length} unit="topic" />
+      {sorted.length > 0 ? (
+        <div className="space-y-3">
+          {sorted.map((item, index) => (
+            <article key={index} className="rounded-2xl border border-slate-200 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="max-w-3xl">
+                  <div className="text-base font-semibold text-slate-900">
+                    <span className="mr-2 text-slate-400">{index + 1}.</span>
+                    {item.topic}
+                  </div>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">{item.reason}</p>
+                  {item.chapter && (
+                    <div className="mt-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                      Chapter: {item.chapter}
+                    </div>
+                  )}
+                </div>
+                <PriorityBadge priority={item.priority} />
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No exam predictions available" description="Upload a richer source document to generate test guidance." />
+      )}
+    </div>
+  );
+}
+
+function PriorityBadge({ priority }) {
+  const config = {
+    high: 'bg-rose-100 text-rose-700',
+    medium: 'bg-amber-100 text-amber-700',
+    low: 'bg-emerald-100 text-emerald-700',
+  }[priority] || 'bg-slate-100 text-slate-600';
+
+  const label = {
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low',
+  }[priority] || 'Medium';
+
+  return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${config}`}>{label}</span>;
+}
+
+function SectionHeader({ title, subtitle, count, unit }) {
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-3">
+      <div>
+        <h2 className="text-xl font-black tracking-tight text-slate-900">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+      </div>
       {count !== undefined && (
-        <span className="ml-auto text-xs font-bold bg-brand-100 text-brand-700 px-2.5 py-1 rounded-full">
-          {count} {unit}{count !== 1 ? 's' : ''}
+        <span className="ml-auto rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+          {count} {unit}{count === 1 ? '' : 's'}
         </span>
       )}
     </div>
   );
 }
 
-/* ── Summary tab ── */
-function SummaryTab({ doc }) {
-  if (!doc.summary) {
-    return <EmptyState icon="📋" message="Summary not available for this document." />;
-  }
-  const paragraphs = doc.summary.split(/\n+/).filter(p => p.trim());
+function EmptyState({ title, description }) {
   return (
-    <div>
-      <SectionHeader icon="📋" title="Document Summary" />
-      <div className="bg-white rounded-2xl card-shadow p-8 space-y-4">
-        {paragraphs.map((para, i) => (
-          <p key={i} className="text-ink-700 leading-relaxed text-[15px]">{para}</p>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Q&A tab ── */
-function QATab({ doc }) {
-  if (!doc.qa || doc.qa.length === 0) {
-    return <EmptyState icon="❓" message="No Q&A pairs available for this document." />;
-  }
-  return (
-    <div>
-      <SectionHeader icon="❓" title="Questions & Answers" count={doc.qa.length} unit="question" />
-      <div className="space-y-3">
-        {doc.qa.map((item, i) => <QAItem key={i} item={item} index={i} />)}
-      </div>
-    </div>
-  );
-}
-
-function QAItem({ item, index }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`bg-white rounded-2xl card-shadow overflow-hidden transition-all ${open ? 'ring-2 ring-brand-200' : ''}`}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full text-left px-5 py-4 flex items-start gap-3 hover:bg-ink-50 transition-colors"
-      >
-        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 text-brand-700 text-xs font-black flex items-center justify-center mt-0.5">
-          {index + 1}
-        </span>
-        <span className="flex-1 font-semibold text-ink-800 text-sm leading-snug">{item.question}</span>
-        <span className={`flex-shrink-0 text-ink-400 text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
-      </button>
-      {open && (
-        <div className="px-5 pb-4 pt-0">
-          <div className="ml-9 pl-3 border-l-2 border-brand-200 text-sm text-ink-600 leading-relaxed">
-            {item.answer}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Predictions tab ── */
-function PredictionsTab({ doc }) {
-  if (!doc.predictions || doc.predictions.length === 0) {
-    return <EmptyState icon="🎯" message="No exam predictions available for this document." />;
-  }
-  const sorted = [...doc.predictions].sort((a, b) => {
-    const order = { high: 0, medium: 1, low: 2 };
-    return (order[a.priority] ?? 1) - (order[b.priority] ?? 1);
-  });
-  return (
-    <div>
-      <SectionHeader icon="🎯" title="Exam Predictions" count={doc.predictions.length} unit="topic" />
-      <div className="space-y-3">
-        {sorted.map((pred, i) => <PredCard key={i} pred={pred} />)}
-      </div>
-    </div>
-  );
-}
-
-const PRIORITY_CONFIG = {
-  high:   { border: 'border-l-red-500',   bg: 'bg-red-50',    badge: 'bg-red-100 text-red-700',    label: '🔴 High' },
-  medium: { border: 'border-l-amber-500', bg: 'bg-amber-50',  badge: 'bg-amber-100 text-amber-700', label: '🟡 Medium' },
-  low:    { border: 'border-l-green-500', bg: 'bg-green-50',  badge: 'bg-green-100 text-green-700', label: '🟢 Low' },
-};
-
-function PredCard({ pred }) {
-  const cfg = PRIORITY_CONFIG[pred.priority] || PRIORITY_CONFIG.medium;
-  return (
-    <div className={`bg-white rounded-2xl card-shadow border-l-4 ${cfg.border} overflow-hidden`}>
-      <div className={`px-5 py-4 ${cfg.bg}`}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <p className="font-bold text-ink-800 text-sm">{pred.topic}</p>
-            <p className="text-ink-600 text-sm mt-1 leading-relaxed">{pred.reason}</p>
-          </div>
-          <span className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-bold ${cfg.badge}`}>
-            {cfg.label}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Empty state ── */
-function EmptyState({ icon, message }) {
-  return (
-    <div className="text-center py-20">
-      <div className="w-16 h-16 bg-ink-100 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">
-        {icon}
-      </div>
-      <p className="text-ink-500 text-sm">{message}</p>
+    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
+      <div className="text-lg font-semibold text-slate-900">{title}</div>
+      <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-500">{description}</p>
     </div>
   );
 }

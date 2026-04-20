@@ -38,9 +38,10 @@ router.post('/upload', authenticate, requireRole('teacher'), uploadPDF.single('f
         const aiResult = await processDocument(text);
         
         await pool.query(
-          'UPDATE documents SET status=$1, summary=$2, qa=$3, flashcards=$4, mindmap=$5, predictions=$6 WHERE id=$7',
+          'UPDATE documents SET status=$1, summary=$2, qa=$3, flashcards=$4, mindmap=$5, predictions=$6, formulas=$7, real_world_examples=$8, common_mistakes=$9 WHERE id=$10',
           ['ready', aiResult.summary, JSON.stringify(aiResult.qa), JSON.stringify(aiResult.flashcards),
-           JSON.stringify(aiResult.mindmap), JSON.stringify(aiResult.predictions), doc.id]
+           JSON.stringify(aiResult.mindmap), JSON.stringify(aiResult.predictions), JSON.stringify(aiResult.formulas),
+           JSON.stringify(aiResult.realWorldExamples), JSON.stringify(aiResult.commonMistakes), doc.id]
         );
 
         const chunks = chunkText(text);
