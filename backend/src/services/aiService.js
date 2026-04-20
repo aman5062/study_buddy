@@ -38,10 +38,47 @@ function extractJson(text) {
   }
 
   const firstBrace = cleaned.indexOf('{');
-  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace === -1) {
+    throw new Error('Could not extract valid JSON from AI response');
+  }
 
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = firstBrace; i < cleaned.length; i += 1) {
+    const char = cleaned[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      if (inString) {
+        escaped = true;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        const candidate = cleaned.slice(firstBrace, i + 1);
+        return JSON.parse(candidate);
+      }
+    }
   }
 
   throw new Error('Could not extract valid JSON from AI response');
