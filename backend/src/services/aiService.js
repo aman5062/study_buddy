@@ -4,38 +4,137 @@ require('dotenv').config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Maximum characters to send to the AI model to stay within token limits
-const MAX_DOCUMENT_LENGTH = 30000;
+const MAX_DOCUMENT_LENGTH = 50000;
+
+const EMPTY_RESULT = {
+  summary: '',
+  qa: [],
+  flashcards: [],
+  mindmap: { topic: 'Document', subtopics: [] },
+  predictions: [],
+};
+
+function extractJSON(text) {
+  // Remove markdown code fences
+  let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+
+  // Try direct parse first
+  try {
+    return JSON.parse(cleaned);
+  } catch (_) { /* fall through */ }
+
+  // Try to find a JSON object in the text via brace matching
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    } catch (_) { /* fall through */ }
+  }
+
+  throw new Error('Could not extract valid JSON from AI response');
+}
+
+function validateAndFill(data) {
+  const result = { ...EMPTY_RESULT };
+
+  if (typeof data.summary === 'string' && data.summary.trim()) {
+    result.summary = data.summary.trim();
+  }
+
+  if (Array.isArray(data.qa)) {
+    result.qa = data.qa.filter(
+      (item) => item && typeof item.question === 'string' && typeof item.answer === 'string'
+    );
+  }
+
+  if (Array.isArray(data.flashcards)) {
+    result.flashcards = data.flashcards.filter(
+      (item) => item && typeof item.term === 'string' && typeof item.definition === 'string'
+    );
+  }
+
+  if (data.mindmap && typeof data.mindmap.topic === 'string') {
+    result.mindmap = data.mindmap;
+  }
+
+  if (Array.isArray(data.predictions)) {
+    result.predictions = data.predictions.filter(
+      (item) => item && typeof item.topic === 'string' && typeof item.reason === 'string'
+    ).map((item) => ({
+      topic: item.topic,
+      reason: item.reason,
+      priority: ['high', 'medium', 'low'].includes(item.priority) ? item.priority : 'medium',
+    }));
+  }
+
+  return result;
+}
 
 async function processDocument(text) {
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const truncated = text.slice(0, MAX_DOCUMENT_LENGTH);
-  
-  const prompt = `Analyze the following educational document and return a JSON object with exactly these fields:
+
+  const prompt = `You are an expert educational content analyzer. Analyze the document below and return ONLY a valid JSON object (no markdown, no code fences, no extra text) with ALL of these fields fully populated:
+
 {
-  "summary": "A comprehensive 3-5 paragraph summary of the document",
-  "qa": [{"question": "...", "answer": "..."}, ...] (10-15 Q&A pairs),
-  "flashcards": [{"term": "...", "definition": "..."}, ...] (10-15 flashcards),
+  "summary": "A detailed 4-6 paragraph summary covering all major topics, key concepts, and important details from the document. Be comprehensive.",
+  "qa": [
+    {"question": "Specific question about the content?", "answer": "Detailed answer based on the document."},
+    ... at least 12 question-answer pairs covering the breadth of the document
+  ],
+  "flashcards": [
+    {"term": "Key Term or Concept", "definition": "Clear, concise definition or explanation."},
+    ... at least 12 flashcards for key vocabulary, concepts, and facts
+  ],
   "mindmap": {
-    "topic": "Main Topic",
+    "topic": "Central Topic of the Document",
     "subtopics": [
-      {"topic": "Subtopic 1", "subtopics": [{"topic": "Detail", "subtopics": []}]},
-      ...
+      {
+        "topic": "Main Section 1",
+        "subtopics": [
+          {"topic": "Key Detail A", "subtopics": []},
+          {"topic": "Key Detail B", "subtopics": []}
+        ]
+      },
+      {
+        "topic": "Main Section 2",
+        "subtopics": [
+          {"topic": "Key Detail C", "subtopics": []}
+        ]
+      }
     ]
   },
-  "predictions": [{"topic": "...", "reason": "...", "priority": "high|medium|low"}, ...] (5-8 exam predictions)
+  "predictions": [
+    {"topic": "Likely Exam Topic", "reason": "Why this topic is likely to be tested.", "priority": "high"},
+    ... at least 6 exam predictions with priority values of "high", "medium", or "low"
+  ]
 }
 
-Return ONLY valid JSON, no markdown, no explanation.
+IMPORTANT: Every array must have real content from the document. Do not leave any field empty or use placeholder text. Return ONLY the JSON object.
 
 Document:
 ${truncated}`;
 
-  const result = await model.generateContent(prompt);
-  const responseText = result.response.text();
-  
-  // Strip markdown code blocks if present
-  const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned);
+  const MAX_RETRIES = 3;
+  let lastError;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      const parsed = extractJSON(responseText);
+      return validateAndFill(parsed);
+    } catch (err) {
+      console.error(`processDocument attempt ${attempt} failed:`, err.message);
+      lastError = err;
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 async function generateEmbedding(text) {

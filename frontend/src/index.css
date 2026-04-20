@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,12 +8,23 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Flashcard 3-D flip ──────────────────────────── */
 .flashcard {
-  perspective: 1000px;
+  perspective: 1200px;
 }
 
 .flashcard-inner {
-  transition: transform 0.6s;
+  transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
   transform-style: preserve-3d;
   position: relative;
 }
@@ -29,8 +42,58 @@
 .flashcard-back {
   transform: rotateY(180deg);
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
+}
+
+/* ── Custom scrollbar ────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c4b5fd;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a78bfa;
+}
+
+/* ── Utility helpers ─────────────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.card-shadow {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(124, 58, 237, 0.07);
+}
+
+.card-shadow-hover:hover {
+  box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 12px 28px rgba(124, 58, 237, 0.14);
+}
+
+/* ── Dot pattern background ──────────────────────── */
+.dot-pattern {
+  background-image: radial-gradient(circle, #ddd6fe 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ── Line clamp utility ──────────────────────────── */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
