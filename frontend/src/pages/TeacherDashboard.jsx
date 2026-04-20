@@ -92,8 +92,7 @@ export default function TeacherDashboard() {
       <Navbar />
       <div className="flex">
         {/* ── Sidebar ── */}
-        <aside className="w-60 min-h-[calc(100vh-57px)] flex-shrink-0 sticky top-[57px] self-start"
-          style={{ background: '#0f172a' }}>
+        <aside className="w-60 min-h-[calc(100vh-57px)] flex-shrink-0 sticky top-[57px] self-start bg-ink-900">
           <div className="px-5 pt-6 pb-4">
             <p className="text-xs font-bold text-ink-500 uppercase tracking-widest">Teacher Portal</p>
           </div>

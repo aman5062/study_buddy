@@ -3,8 +3,9 @@ require('dotenv').config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Maximum characters to send to the AI model to stay within token limits
 const MAX_DOCUMENT_LENGTH = 50000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
 
 const EMPTY_RESULT = {
   summary: '',
@@ -116,10 +117,10 @@ IMPORTANT: Every array must have real content from the document. Do not leave an
 Document:
 ${truncated}`;
 
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES_LOCAL = MAX_RETRIES;
   let lastError;
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= MAX_RETRIES_LOCAL; attempt++) {
     try {
       const result = await model.generateContent(prompt);
       const responseText = result.response.text();
@@ -128,8 +129,8 @@ ${truncated}`;
     } catch (err) {
       console.error(`processDocument attempt ${attempt} failed:`, err.message);
       lastError = err;
-      if (attempt < MAX_RETRIES) {
-        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      if (attempt < MAX_RETRIES_LOCAL) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
       }
     }
   }

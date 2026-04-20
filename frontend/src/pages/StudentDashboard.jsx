@@ -14,6 +14,9 @@ const FEATURE_COLORS = [
   'bg-rose-50 text-rose-700',
 ];
 
+const MORNING_END_HOUR = 12;
+const AFTERNOON_END_HOUR = 17;
+
 export default function StudentDashboard() {
   const [documents, setDocuments] = useState([]);
   const [search, setSearch] = useState('');
@@ -33,8 +36,8 @@ export default function StudentDashboard() {
 
   const greeting = () => {
     const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
+    if (h < MORNING_END_HOUR) return 'Good morning';
+    if (h < AFTERNOON_END_HOUR) return 'Good afternoon';
     return 'Good evening';
   };
 
