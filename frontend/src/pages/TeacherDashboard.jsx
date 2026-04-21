@@ -84,7 +84,8 @@ export default function TeacherDashboard() {
     loadData();
   };
 
-  const readyDocs      = documents.filter(d => d.status === 'ready').length;
+  const readyDocs      = documents.filter(d => d.status === 'ready');
+  const readyDocsCount = readyDocs.length;
   const processingDocs = documents.filter(d => d.status === 'processing').length;
 
   return (
@@ -162,8 +163,8 @@ export default function TeacherDashboard() {
                 {[
                   { label: 'Total Students', value: students.length,  icon: '👥', from: '#7c3aed', to: '#5b21b6' },
                   { label: 'Total Documents', value: documents.length, icon: '📄', from: '#0891b2', to: '#0369a1' },
-                  { label: 'Ready Docs',       value: readyDocs,        icon: '✅', from: '#059669', to: '#047857' },
-                  { label: 'Processing',        value: processingDocs,   icon: '⚙️', from: '#d97706', to: '#b45309' },
+                  { label: 'Ready Docs',       value: readyDocsCount,   icon: '✅', from: '#059669', to: '#047857' },
+                  { label: 'Processing',        value: processingDocs,  icon: '⚙️', from: '#d97706', to: '#b45309' },
                 ].map(s => (
                   <div key={s.label} className="bg-white rounded-2xl p-5 card-shadow overflow-hidden relative">
                     <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full opacity-10"
@@ -416,7 +417,7 @@ export default function TeacherDashboard() {
           )}
         </main>
       </div>
-      <Chatbot />
+      <Chatbot documents={readyDocs} />
     </div>
   );
 }

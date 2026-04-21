@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { sendChat } from '../services/api';
 
 const SUGGESTIONS = [
@@ -8,41 +8,90 @@ const SUGGESTIONS = [
   'What might appear in the exam?',
 ];
 
-export default function Chatbot({ documentId }) {
-  const [open, setOpen]       = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: "Hi! I'm your Study Buddy AI 🤖\nAsk me anything about this document — I'm here to help you learn!",
-    }
-  ]);
-  const [input, setInput]     = useState('');
-  const [loading, setLoading] = useState(false);
+const INITIAL_MESSAGE = {
+  role: 'assistant',
+  content: "Hi! I'm your Study Buddy AI 🤖\nAsk me anything about this document — I'm here to help you learn!",
+};
+
+export default function Chatbot({ documentId, documents = [] }) {
+  const readyDocs = useMemo(
+    () => (documents || []).filter((doc) => doc.status === 'ready'),
+    [documents]
+  );
+
+  const [open, setOpen]         = useState(false);
+  const [selectedDocId, setSelectedDocId] = useState(documentId ?? readyDocs[0]?.id ?? null);
+  const [messages, setMessages] = useState([INITIAL_MESSAGE]);
+  const [input, setInput]       = useState('');
+  const [loading, setLoading]   = useState(false);
   const bottomRef = useRef(null);
+
+  const activeDocId = documentId ?? selectedDocId;
+  const activeDocTitle = useMemo(() => {
+    if (!activeDocId) return '';
+    const source = Array.isArray(documents) ? documents : readyDocs;
+    const found = source.find((doc) => doc.id === activeDocId);
+    return found?.title || '';
+  }, [activeDocId, documents, readyDocs]);
+  const activeDocLabel = activeDocTitle || (activeDocId ? `Document #${activeDocId}` : '');
+  const canChat = Boolean(activeDocId);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (documentId) {
+      setSelectedDocId(documentId);
+      return;
+    }
+
+    if (readyDocs.length === 0) {
+      setSelectedDocId(null);
+      return;
+    }
+
+    setSelectedDocId((current) =>
+      readyDocs.some((doc) => doc.id === current) ? current : readyDocs[0].id
+    );
+  }, [documentId, readyDocs]);
+
+  useEffect(() => {
+    setMessages([INITIAL_MESSAGE]);
+    setInput('');
+  }, [activeDocId]);
+
   const send = async (text) => {
     const msg = (text || input).trim();
     if (!msg || loading) return;
+
+    if (!canChat) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Select a document first so I know what to reference.' },
+      ]);
+      return;
+    }
+
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: msg }]);
     setLoading(true);
     try {
-      const res = await sendChat({ message: msg, documentId });
+      const res = await sendChat({ message: msg, documentId: activeDocId });
       setMessages(prev => [...prev, { role: 'assistant', content: res.data.answer }]);
-    } catch {
+    } catch (err) {
+      const fallback = err.response?.data?.error
+        ? `Sorry, I ran into an error: ${err.response.data.error}`
+        : 'Sorry, I ran into an error. Please try again.';
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: "Sorry, I ran into an error. Please try again."
+        content: fallback
       }]);
     }
     setLoading(false);
   };
 
-  const showSuggestions = messages.length === 1 && !loading;
+  const showSuggestions = messages.length === 1 && !loading && canChat;
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
@@ -63,9 +112,37 @@ export default function Chatbot({ documentId }) {
               <p className="text-white font-bold text-sm leading-none">Study Buddy AI</p>
               <p className="text-purple-300 text-xs mt-0.5">Powered by Gemini</p>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse-slow" />
-              <span className="text-green-300 text-xs font-medium">Online</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse-slow" />
+                <span className="text-green-300 text-xs font-medium">Online</span>
+              </div>
+
+              {!documentId && (
+                readyDocs.length > 0 ? (
+                  <select
+                    value={selectedDocId ?? ''}
+                    onChange={(e) => setSelectedDocId(Number.parseInt(e.target.value, 10) || null)}
+                    className="text-xs font-semibold text-white bg-white/10 border border-white/20 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-white/40"
+                  >
+                    {readyDocs.map((doc) => (
+                      <option key={doc.id} value={doc.id} className="text-slate-900">
+                        {doc.title}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-amber-100 text-xs font-medium whitespace-nowrap">
+                    Upload a document to chat
+                  </span>
+                )
+              )}
+
+              {documentId && activeDocLabel && (
+                <span className="text-white/80 text-xs font-semibold truncate max-w-[140px]" title={activeDocLabel}>
+                  {activeDocLabel}
+                </span>
+              )}
             </div>
             <button onClick={() => setOpen(false)}
               className="w-7 h-7 bg-white/15 hover:bg-white/25 rounded-lg flex items-center justify-center text-white text-xs transition-colors">
@@ -135,12 +212,13 @@ export default function Chatbot({ documentId }) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-              placeholder="Ask a question…"
-              className="flex-1 px-3.5 py-2 border-2 border-ink-200 rounded-xl text-sm text-ink-800 placeholder-ink-400 focus:outline-none focus:border-brand-500 transition-colors"
+              placeholder={canChat ? 'Ask a question…' : 'Select a document to start'}
+              disabled={!canChat}
+              className="flex-1 px-3.5 py-2 border-2 border-ink-200 rounded-xl text-sm text-ink-800 placeholder-ink-400 focus:outline-none focus:border-brand-500 transition-colors disabled:bg-ink-50 disabled:text-ink-300"
             />
             <button
               onClick={() => send()}
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || !canChat}
               className="w-10 h-10 flex-shrink-0 rounded-xl flex items-center justify-center text-white transition-all disabled:opacity-40"
               style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
             >
