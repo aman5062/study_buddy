@@ -163,7 +163,10 @@ export default function DocumentView() {
         </div>
       </div>
 
-      <Chatbot documentId={Number.parseInt(id, 10)} />
+      <Chatbot
+        documentId={Number.parseInt(id, 10)}
+        documents={[doc]}
+      />
     </div>
   );
 }

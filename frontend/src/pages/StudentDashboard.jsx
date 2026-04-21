@@ -33,6 +33,7 @@ export default function StudentDashboard() {
   const filtered = documents.filter(
     d => d.title.toLowerCase().includes(search.toLowerCase()) && d.status === 'ready'
   );
+  const readyDocs = documents.filter(d => d.status === 'ready');
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -140,7 +141,7 @@ export default function StudentDashboard() {
         )}
       </main>
 
-      <Chatbot />
+      <Chatbot documents={readyDocs} />
     </div>
   );
 }
