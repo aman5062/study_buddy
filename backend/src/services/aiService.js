@@ -197,7 +197,15 @@ function normalizeResult(data) {
 }
 
 function buildDocumentPrompt(text) {
-  return `You are an expert educational content analyzer. Analyze the document below and return ONLY a valid JSON object with this exact structure:
+  const documentContent = text.slice(0, MAX_DOCUMENT_LENGTH).trim();
+  const fallbackJson = JSON.stringify(EMPTY_RESULT);
+
+  return `You are an expert educational content analyzer. Ground every part of your response strictly in the provided document content.
+- First, identify the dominant subject/field from the document (e.g., "data structures in JavaScript") and keep every section aligned with that subject and its terminology.
+- Do not introduce topics that are not present in the document text. If the document does not mention physics (or any other subject), do not include it.
+- If the document text is missing, unreadable, or too short to determine a subject, return exactly this JSON and nothing else: ${fallbackJson}
+
+Return ONLY a valid JSON object with this exact structure and do not add new fields:
 
 {
   "summary": "A detailed 5-7 paragraph summary covering the full document, major ideas, and important supporting details.",
@@ -237,12 +245,13 @@ function buildDocumentPrompt(text) {
 Rules:
 - Use only valid JSON.
 - Do not wrap the response in markdown or code fences.
-- Fill every array with substantial content.
+- Fill every array with substantial content. Leave an array empty only when the document truly lacks material for that section—do not guess.
+- Keep every section faithful to the document’s subject and wording; do not switch domains or invent examples.
 - Prefer breadth and depth: aim for at least 12 Q&A items, 16 flashcards, 10 formulas, 8 real-world examples, 6 common mistakes, and 8 exam predictions when the source material supports it.
-- Stay faithful to the document, but you may add general educational context that helps a student learn the topic better.
+- If the document content does not support these counts, provide as many grounded items as possible without fabricating details.
 
 Document Content:
-${text.slice(0, MAX_DOCUMENT_LENGTH)}`;
+${documentContent || '[No readable text extracted from the document]'}`;
 }
 
 function buildChatPrompt(query, context, history) {
